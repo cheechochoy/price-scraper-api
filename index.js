@@ -1,24 +1,31 @@
-// index.js (with real OCR)
+// index.js (OCR server with /ocr and /ocr-dual)
 import express from 'express';
-import fetch from 'node-fetch'; // Required for fetching base64 image data
+import fetch from 'node-fetch';
 import Tesseract from 'tesseract.js';
 
 const app = express();
-app.use(express.json({ limit: '10mb' })); // increase limit for large base64 images
+app.use(express.json({ limit: '10mb' }));
 
+// Helper for dual-pass OCR
+async function runTesseract(buffer, whitelist) {
+  const { createWorker } = Tesseract;
+  const worker = await createWorker('eng');
+  await worker.setParameters({ tessedit_char_whitelist: whitelist });
+
+  const { data: { text } } = await worker.recognize(buffer);
+  await worker.terminate();
+  return text;
+}
+
+// 🔵 Original OCR endpoint
 app.post('/ocr', async (req, res) => {
   try {
     const { imageBase64 } = req.body;
+    if (!imageBase64) return res.status(400).json({ error: 'Missing imageBase64' });
 
-    if (!imageBase64) {
-      return res.status(400).json({ error: 'Missing imageBase64' });
-    }
-
-    // Convert data URL to buffer
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
     const imageBuffer = Buffer.from(base64Data, 'base64');
 
-    // Run Tesseract OCR
     const result = await Tesseract.recognize(imageBuffer, 'eng', {
       logger: m => console.log(m.status, m.progress),
     });
@@ -30,6 +37,31 @@ app.post('/ocr', async (req, res) => {
   } catch (err) {
     console.error('OCR processing failed:', err);
     res.status(500).json({ error: 'OCR processing failed' });
+  }
+});
+
+// 🟢 Dual-pass OCR endpoint
+app.post('/ocr-dual', async (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    if (!imageBase64) return res.status(400).json({ error: 'Missing imageBase64' });
+
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+
+    console.log('🟢 Starting dual-pass OCR');
+
+    const alphabetic = await runTesseract(imageBuffer, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz');
+    const numeric = await runTesseract(imageBuffer, '0123456789./:%,-');
+
+    res.json({
+      alphabetic,
+      numeric,
+      IsErroredOnProcessing: false,
+    });
+  } catch (err) {
+    console.error('Dual OCR failed:', err);
+    res.status(500).json({ error: 'OCR dual-pass failed' });
   }
 });
 
