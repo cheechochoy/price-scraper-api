@@ -1,42 +1,37 @@
-# app.py
 from flask import Flask, request, jsonify
-import easyocr
+import pytesseract
+from PIL import Image
 import base64
 import io
-from PIL import Image
-import numpy as np
 
 app = Flask(__name__)
-
-# 🔁 Load OCR model once (saves time on repeated scans)
-reader = easyocr.Reader(['en'], gpu=False)
 
 @app.route('/ocr', methods=['POST'])
 def ocr():
     try:
         data = request.get_json()
-        base64_image = data.get('imageBase64')
+        image_b64 = data.get('imageBase64')
 
-        if not base64_image:
+        if not image_b64:
             return jsonify({'error': 'Missing imageBase64'}), 400
 
-        # Strip data URI prefix if exists
-        if ',' in base64_image:
-            base64_image = base64_image.split(',')[1]
+        # Strip prefix if present
+        if ',' in image_b64:
+            image_b64 = image_b64.split(',')[1]
 
-        image_data = base64.b64decode(base64_image)
-        image = Image.open(io.BytesIO(image_data)).convert('RGB')
-        image_np = np.array(image)
+        image_data = base64.b64decode(image_b64)
+        image = Image.open(io.BytesIO(image_data))
 
-        # 🔍 Run OCR
-        results = reader.readtext(image_np, detail=0)
-        text_output = '\n'.join(results)
+        text = pytesseract.image_to_string(image)
 
-        return jsonify({'text': text_output})
+        return jsonify({'text': text})
 
     except Exception as e:
-        print("OCR Error:", e)
         return jsonify({'error': str(e)}), 500
+
+@app.route('/health')
+def health():
+    return 'OK'
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
