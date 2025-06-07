@@ -15,7 +15,6 @@ def ocr():
         if not image_b64:
             return jsonify({'error': 'Missing imageBase64'}), 400
 
-        # Strip prefix if present
         if ',' in image_b64:
             image_b64 = image_b64.split(',')[1]
 
