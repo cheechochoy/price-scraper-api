@@ -67,7 +67,7 @@ app.post('/ocr-dual', async (req, res) => {
 
 
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT;
 app.listen(PORT, () => {
   console.log(`✅ OCR server running on port ${PORT}`);
 });
