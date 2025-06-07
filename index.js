@@ -52,10 +52,8 @@ app.post('/ocr-dual', async (req, res) => {
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
     const imageBuffer = Buffer.from(base64Data, 'base64');
 
-    // Run OCR with Tesseract for dual layout detection (same as /ocr for now)
-    const result = await Tesseract.recognize(imageBuffer, 'eng', {
-      logger: m => console.log(`[Dual] ${m.status} ${m.progress}`),
-    });
+    // Lightweight Tesseract call (no createWorker)
+    const result = await Tesseract.recognize(imageBuffer, 'eng');
 
     res.json({
       ParsedResults: [{ ParsedText: result.data.text }],
@@ -66,6 +64,7 @@ app.post('/ocr-dual', async (req, res) => {
     res.status(500).json({ error: 'OCR-DUAL processing failed' });
   }
 });
+
 
 
 const PORT = process.env.PORT || 3001;
