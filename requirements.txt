@@ -1,5 +1,3 @@
-flask
-easyocr
-gunicorn
-pillow
-numpy
+pytesseract
+flask        # or fastapi, etc., depending on your app
+gunicorn     # if you're using it

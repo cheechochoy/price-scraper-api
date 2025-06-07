@@ -1,7 +1,10 @@
 services:
   - type: web
-    name: price-scraper-api
-    env: docker
+    name: ocr-app
+    env: python
+    buildCommand: |
+      apt-get update
+      apt-get install -y tesseract-ocr
+      pip install -r requirements.txt
+    startCommand: python app.py
     plan: free
-    dockerfilePath: ./Dockerfile
-    autoDeploy: true
