@@ -1,13 +1,14 @@
-
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
-
 from PIL import Image
 import base64
 import io
 
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+
 app = Flask(__name__)
+CORS(app)  # Allow cross-origin for mobile apps
 
 @app.route('/ocr', methods=['POST'])
 def ocr():
@@ -22,13 +23,15 @@ def ocr():
             image_b64 = image_b64.split(',')[1]
 
         image_data = base64.b64decode(image_b64)
-        image = Image.open(io.BytesIO(image_data))
+        image = Image.open(io.BytesIO(image_data)).convert("RGB")
 
         text = pytesseract.image_to_string(image)
 
         return jsonify({'text': text})
 
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
