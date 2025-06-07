@@ -3,7 +3,7 @@ services:
     name: ocr-backend
     env: python
     buildCommand: ""
-    startCommand: python app.py
+    startCommand: gunicorn app:app -w 2 -b 0.0.0.0:10000
     envVars:
       - key: FLASK_ENV
         value: production
