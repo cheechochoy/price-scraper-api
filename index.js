@@ -44,26 +44,29 @@ app.post('/ocr', async (req, res) => {
 app.post('/ocr-dual', async (req, res) => {
   try {
     const { imageBase64 } = req.body;
-    if (!imageBase64) return res.status(400).json({ error: 'Missing imageBase64' });
+
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Missing imageBase64' });
+    }
 
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
     const imageBuffer = Buffer.from(base64Data, 'base64');
 
-    console.log('🟢 Starting dual-pass OCR');
-
-    const alphabetic = await runTesseract(imageBuffer, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz');
-    const numeric = await runTesseract(imageBuffer, '0123456789./:%,-');
+    // Run OCR with Tesseract for dual layout detection (same as /ocr for now)
+    const result = await Tesseract.recognize(imageBuffer, 'eng', {
+      logger: m => console.log(`[Dual] ${m.status} ${m.progress}`),
+    });
 
     res.json({
-      alphabetic,
-      numeric,
+      ParsedResults: [{ ParsedText: result.data.text }],
       IsErroredOnProcessing: false,
     });
   } catch (err) {
-    console.error('Dual OCR failed:', err);
-    res.status(500).json({ error: 'OCR dual-pass failed' });
+    console.error('OCR-DUAL processing failed:', err);
+    res.status(500).json({ error: 'OCR-DUAL processing failed' });
   }
 });
+
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
