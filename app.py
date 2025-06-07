@@ -1,5 +1,7 @@
+
 from flask import Flask, request, jsonify
 import pytesseract
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 from PIL import Image
 import base64
 import io
