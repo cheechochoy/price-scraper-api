@@ -14,6 +14,7 @@ pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 app = Flask(__name__)
 CORS(app)
 
+# List of known store names
 known_stores = [
     "LOTUS", "TESCO", "GIANT", "AEON", "MYDIN", "FRESH", "ECONSAVE", "99 SPEEDMART",
     "THE STORE", "NSK", "HERO", "TF VALUE-MART", "COLD STORAGE", "JAYA GROCER"
@@ -28,7 +29,7 @@ def preprocess_image(pil_image):
     return Image.fromarray(thresh)
 
 def crop_top(img, percentage=0.2):
-    """Crop the top X% of the image."""
+    """Crop the top X% of the image (for likely store/town name)."""
     width, height = img.size
     return img.crop((0, 0, width, int(height * percentage)))
 
@@ -64,12 +65,17 @@ def ocr_dual():
     cfg_num = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789./:%,-'
     numeric_text = pytesseract.image_to_string(img, config=cfg_num).strip()
 
+    # Perform fuzzy matching to detect store name from the alphabetic text
     matched_store = fuzzy_match_store(alpha_text)
+
+    # Create merged fallback text for frontend
+    combined_text = f"{alpha_text}\n{numeric_text}"
 
     return jsonify({
         "alphabetic": alpha_text,
         "numeric": numeric_text,
         "matchedStore": matched_store or "Unknown",
+        "text": combined_text,
         "IsErroredOnProcessing": False
     })
 
@@ -85,6 +91,7 @@ def ocr():
     img = Image.open(io.BytesIO(base64.b64decode(img_b64))).convert('RGB')
     img = preprocess_image(img)
 
+    # Perform OCR
     text = pytesseract.image_to_string(img)
     return jsonify(text=text)
 
