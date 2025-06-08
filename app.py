@@ -28,7 +28,7 @@ def preprocess_image(pil_image):
     _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return Image.fromarray(thresh)
 
-def crop_top(img, percentage=0.2):
+def crop_top(img, percentage=0.35):
     """Crop the top X% of the image (for likely store/town name)."""
     width, height = img.size
     return img.crop((0, 0, width, int(height * percentage)))
@@ -52,30 +52,31 @@ def ocr_dual():
         return jsonify(error='Missing imageBase64'), 400
 
     img = Image.open(io.BytesIO(base64.b64decode(img_b64))).convert('RGB')
-    img = preprocess_image(img)
+    preprocessed_img = preprocess_image(img)
 
-    # Crop top section for likely store/town name
-    header_img = crop_top(img)
+    # Crop top section for likely store name
+    header_img = crop_top(preprocessed_img)
 
-    # OCR Pass 1: Alphabetic (header only)
+    # OCR 1: Alphabetic restricted (header only)
     cfg_alpha = r'--oem 3 --psm 4 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
     alpha_text = pytesseract.image_to_string(header_img, config=cfg_alpha).strip()
 
-    # OCR Pass 2: Numeric (full image)
+    # OCR fallback: general OCR (header only)
+    fallback_text = pytesseract.image_to_string(header_img).strip()
+
+    # OCR 2: Numeric (full image)
     cfg_num = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789./:%,-'
-    numeric_text = pytesseract.image_to_string(img, config=cfg_num).strip()
+    numeric_text = pytesseract.image_to_string(preprocessed_img, config=cfg_num).strip()
 
-    # Perform fuzzy matching to detect store name from the alphabetic text
-    matched_store = fuzzy_match_store(alpha_text)
-
-    # Create merged fallback text for frontend
-    combined_text = f"{alpha_text}\n{numeric_text}"
+    # Match store using both OCR outputs
+    matched_store = fuzzy_match_store(alpha_text) or fuzzy_match_store(fallback_text)
 
     return jsonify({
         "alphabetic": alpha_text,
+        "fallbackText": fallback_text,
         "numeric": numeric_text,
         "matchedStore": matched_store or "Unknown",
-        "text": combined_text,
+        "text": f"{alpha_text}\n{numeric_text}",
         "IsErroredOnProcessing": False
     })
 
@@ -91,7 +92,6 @@ def ocr():
     img = Image.open(io.BytesIO(base64.b64decode(img_b64))).convert('RGB')
     img = preprocess_image(img)
 
-    # Perform OCR
     text = pytesseract.image_to_string(img)
     return jsonify(text=text)
 
