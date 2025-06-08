@@ -1,68 +1,83 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import pytesseract
-from PIL import Image
-import base64
-import io
+import express from 'express';
+import Tesseract from 'tesseract.js';
 
-pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+// Dummy comment to trigger redeploy
 
-app = Flask(__name__)
-CORS(app)  # Allow cross-origin for mobile apps
+const app = express();
+app.use(express.json({ limit: '10mb' }));
 
-@app.route('/ocr', methods=['POST'])
-def ocr():
-    try:
-        data = request.get_json()
-        image_b64 = data.get('imageBase64')
+/**
+ * Helper function to decode base64 image to a Buffer.
+ */
+function decodeBase64Image(imageBase64) {
+  if (!imageBase64) throw new Error('Missing imageBase64');
+  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  return Buffer.from(base64Data, 'base64');
+}
 
-        if not image_b64:
-            return jsonify({'error': 'Missing imageBase64'}), 400
+/**
+ * Helper for dual-pass OCR using a whitelist.
+ */
+async function runTesseract(buffer, whitelist) {
+  const { createWorker } = Tesseract;
+  const worker = await createWorker('eng');
 
-        if ',' in image_b64:
-            image_b64 = image_b64.split(',')[1]
+  await worker.setParameters({
+    tessedit_char_whitelist: whitelist,
+  });
 
-        image_data = base64.b64decode(image_b64)
-        image = Image.open(io.BytesIO(image_data)).convert("RGB")
+  const {
+    data: { text },
+  } = await worker.recognize(buffer);
 
-        text = pytesseract.image_to_string(image)
+  await worker.terminate();
+  return text;
+}
 
-        return jsonify({'text': text})
+// 🔵 Single-pass OCR
+app.post('/ocr', async (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    const imageBuffer = decodeBase64Image(imageBase64);
 
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-    
-@app.route('/ocr-dual', methods=['POST'])
-def ocr_dual():
-    try:
-        data = request.get_json()
-        image_b64 = data.get('imageBase64')
+    const result = await Tesseract.recognize(imageBuffer, 'eng', {
+      logger: m => console.log(m.status, m.progress),
+    });
 
-        if not image_b64:
-            return jsonify({'error': 'Missing imageBase64'}), 400
+    res.json({
+      ParsedResults: [{ ParsedText: result.data.text }],
+      IsErroredOnProcessing: false,
+    });
+  } catch (err) {
+    console.error('❌ OCR failed:', err.message);
+    res.status(500).json({ error: 'OCR processing failed' });
+  }
+});
 
-        if ',' in image_b64:
-            image_b64 = image_b64.split(',')[1]
+// 🟢 Dual-pass OCR: Alphabetic and Numeric results
+app.post('/ocr-dual', async (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    const imageBuffer = decodeBase64Image(imageBase64);
 
-        image_data = base64.b64decode(image_b64)
-        image = Image.open(io.BytesIO(image_data)).convert("RGB")
+    console.log('🟢 Running dual-pass OCR...');
 
-        # Example alternate OCR logic (you can modify this)
-        text = pytesseract.image_to_string(image, lang='eng')
+    const alphabetic = await runTesseract(imageBuffer, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz');
+    const numeric = await runTesseract(imageBuffer, '0123456789./:%,-');
 
-        return jsonify({'text': text})
+    res.json({
+      alphabetic: alphabetic.trim(),
+      numeric: numeric.trim(),
+      IsErroredOnProcessing: false,
+    });
+  } catch (err) {
+    console.error('❌ Dual OCR failed:', err.message);
+    res.status(500).json({ error: 'OCR dual-pass failed' });
+  }
+});
 
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/health')
-def health():
-    return 'OK'
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+// ✅ Server start
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`✅ OCR server running on port ${PORT}`);
+});
