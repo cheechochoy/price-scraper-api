@@ -1,4 +1,4 @@
-pytesseract
+flask
 flask-cors
-flask        # or fastapi, etc., depending on your app
-gunicorn     # if you're using it
+pillow
+pytesseract

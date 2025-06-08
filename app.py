@@ -1,83 +1,53 @@
-import express from 'express';
-import Tesseract from 'tesseract.js';
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import pytesseract
+from PIL import Image
+import base64
+import io
 
-// Dummy comment to trigger redeploy
+# Point pytesseract at the system install
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
-const app = express();
-app.use(express.json({ limit: '10mb' }));
+app = Flask(__name__)
+CORS(app)
 
-/**
- * Helper function to decode base64 image to a Buffer.
- */
-function decodeBase64Image(imageBase64) {
-  if (!imageBase64) throw new Error('Missing imageBase64');
-  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-  return Buffer.from(base64Data, 'base64');
-}
+@app.route('/ocr', methods=['POST'])
+def ocr():
+    data = request.get_json() or {}
+    img_b64 = data.get('imageBase64', '')
+    if ',' in img_b64:
+        img_b64 = img_b64.split(',', 1)[1]
+    if not img_b64:
+        return jsonify(error='Missing imageBase64'), 400
 
-/**
- * Helper for dual-pass OCR using a whitelist.
- */
-async function runTesseract(buffer, whitelist) {
-  const { createWorker } = Tesseract;
-  const worker = await createWorker('eng');
+    img = Image.open(io.BytesIO(base64.b64decode(img_b64))).convert('RGB')
+    text = pytesseract.image_to_string(img)
+    return jsonify(text=text)
 
-  await worker.setParameters({
-    tessedit_char_whitelist: whitelist,
-  });
+@app.route('/ocr-dual', methods=['POST'])
+def ocr_dual():
+    data = request.get_json() or {}
+    img_b64 = data.get('imageBase64', '')
+    if ',' in img_b64:
+        img_b64 = img_b64.split(',', 1)[1]
+    if not img_b64:
+        return jsonify(error='Missing imageBase64'), 400
 
-  const {
-    data: { text },
-  } = await worker.recognize(buffer);
+    img = Image.open(io.BytesIO(base64.b64decode(img_b64))).convert('RGB')
 
-  await worker.terminate();
-  return text;
-}
+    # Pass 1: letters only
+    cfg_alpha = r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+    alpha = pytesseract.image_to_string(img, config=cfg_alpha).strip()
 
-// 🔵 Single-pass OCR
-app.post('/ocr', async (req, res) => {
-  try {
-    const { imageBase64 } = req.body;
-    const imageBuffer = decodeBase64Image(imageBase64);
+    # Pass 2: digits & common symbols
+    cfg_num = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789./:%,-'
+    numeric = pytesseract.image_to_string(img, config=cfg_num).strip()
 
-    const result = await Tesseract.recognize(imageBuffer, 'eng', {
-      logger: m => console.log(m.status, m.progress),
-    });
+    return jsonify(alphabetic=alpha, numeric=numeric)
 
-    res.json({
-      ParsedResults: [{ ParsedText: result.data.text }],
-      IsErroredOnProcessing: false,
-    });
-  } catch (err) {
-    console.error('❌ OCR failed:', err.message);
-    res.status(500).json({ error: 'OCR processing failed' });
-  }
-});
+@app.route('/health')
+def health():
+    return 'OK'
 
-// 🟢 Dual-pass OCR: Alphabetic and Numeric results
-app.post('/ocr-dual', async (req, res) => {
-  try {
-    const { imageBase64 } = req.body;
-    const imageBuffer = decodeBase64Image(imageBase64);
-
-    console.log('🟢 Running dual-pass OCR...');
-
-    const alphabetic = await runTesseract(imageBuffer, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz');
-    const numeric = await runTesseract(imageBuffer, '0123456789./:%,-');
-
-    res.json({
-      alphabetic: alphabetic.trim(),
-      numeric: numeric.trim(),
-      IsErroredOnProcessing: false,
-    });
-  } catch (err) {
-    console.error('❌ Dual OCR failed:', err.message);
-    res.status(500).json({ error: 'OCR dual-pass failed' });
-  }
-});
-
-// ✅ Server start
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`✅ OCR server running on port ${PORT}`);
-});
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(__import__('os').environ.get('PORT', 10000)))
