@@ -4,7 +4,7 @@ import fetch from 'node-fetch';
 import Tesseract from 'tesseract.js';
 
 // Trigger redeploy
-
+// Dummy comment to force redeploy
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
