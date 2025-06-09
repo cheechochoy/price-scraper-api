@@ -59,13 +59,13 @@ def submit():
     data = request.get_json() or {}
 
     items = data.get('items', [])
-    # Accept 'user_id' or fallback to 'uuid' for anonymous users
     user_id = data.get('user_id') or data.get('uuid')
     town = data.get('town')
+    region = data.get('region')
     country = data.get('country')
     timestamp = data.get('timestamp')
 
-    if not items or not user_id or not town or not timestamp:
+    if not items or not user_id or not town or not region or not country or not timestamp:
         return jsonify(error='Missing required fields'), 400
 
     try:
@@ -80,11 +80,12 @@ def submit():
             quality = item.get('data_quality') or item.get('quality')
 
             if not code or not name or not quality:
-                continue  # skip invalid items
+                continue
 
             submitted_data.append({
                 "user_id": user_id,
                 "town": town,
+                "region": region,
                 "country": country,
                 "timestamp": timestamp,
                 "received_at": readable_time.isoformat(),
@@ -112,18 +113,34 @@ def submit():
     except Exception as e:
         return jsonify(error='Failed to process submission', details=str(e)), 500
 
+
 from collections import defaultdict
 
-@app.route('/leaderboard')
+@app.route('/api/leaderboard', methods=['GET'])
 def leaderboard():
-    leaderboard_by_country = defaultdict(lambda: defaultdict(int))
+    # Tally points per community key
+    leaderboard_data = defaultdict(int)
 
     for entry in submitted_data:
-        country = entry.get('country', '??')
-        user_id = entry.get('user_id')
-        leaderboard_by_country[country][user_id] += 1
+        town = entry.get("town", "").strip()
+        region = entry.get("region", "").strip()
+        country = entry.get("country", "").strip().upper()
 
-    return jsonify(leaderboard_by_country)
+        if not (town and region and country):
+            continue  # Skip incomplete records
+
+        key = f"{town}, {region}, {country}"
+        leaderboard_data[key] += 1  # 1 point per item
+
+    # Convert to sorted list
+    sorted_leaderboard = sorted(
+        [{"community": k, "points": v} for k, v in leaderboard_data.items()],
+        key=lambda x: x["points"],
+        reverse=True
+    )
+
+    return jsonify(sorted_leaderboard)
+
 
 
 @app.route('/health')
