@@ -150,6 +150,9 @@ def leaderboard():
         for (town, region, country), points in leaderboard_data.items()
     ], key=lambda x: x["count"], reverse=True)
 
+    print("✅ Leaderboard API response:", sorted_leaderboard)
+
+
     return jsonify(sorted_leaderboard)
 
 
