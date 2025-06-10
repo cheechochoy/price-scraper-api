@@ -168,6 +168,50 @@ def leaderboard():
     logger.info("✅ Leaderboard API response: %s", sorted_leaderboard)
     return jsonify(sorted_leaderboard)
 
+import random
+
+@app.route('/api/price/<code>', methods=['GET'])
+def get_price_data(code):
+    if not code:
+        return jsonify(error="Missing product code"), 400
+
+    try:
+        # Filter matching entries
+        matching = [
+            entry for entry in submitted_data
+            if entry.get("code") == code
+        ]
+
+        if not matching:
+            return jsonify([])  # Return empty list
+
+        # Sort by timestamp descending (freshest first)
+        matching.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+
+        # Limit to top 10
+        top_entries = matching[:10]
+
+        # Jitter coordinates and format response
+        response = []
+        for entry in top_entries:
+            lat = random.uniform(5.2, 6.2)   # West Malaysia range (adjust if needed)
+            lon = random.uniform(100.2, 101.7)
+            response.append({
+                "uuid": entry.get("user_id", "")[:8],
+                "price": entry.get("price") or entry.get("p_price") or "N/A",
+                "purc_dt": datetime.fromtimestamp(entry["timestamp"] / 1000).strftime("%Y-%m-%d"),
+                "lat": lat,
+                "lon": lon,
+                "fresh": entry == top_entries[0]  # Only the freshest entry is flagged
+            })
+
+        return jsonify(response)
+
+    except Exception as e:
+        return jsonify(error="Failed to fetch price data", details=str(e)), 500
+
+
+
 @app.route('/health')
 def health():
     return 'OK'
