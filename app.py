@@ -1,7 +1,10 @@
 import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+valid_cutoff = datetime.now(timezone.utc) - timedelta(days=21)
+
 
 OCR_SPACE_API_KEY = "K83442308688957"
 
@@ -118,28 +121,38 @@ from collections import defaultdict
 
 @app.route('/api/leaderboard', methods=['GET'])
 def leaderboard():
-    # Tally points per community key
+    valid_cutoff = datetime.utcnow() - timedelta(days=21)
     leaderboard_data = defaultdict(int)
 
     for entry in submitted_data:
+        timestamp = entry.get("timestamp", 0)
+        if datetime.fromtimestamp(timestamp / 1000) < valid_cutoff:
+            continue
+
         town = entry.get("town", "").strip()
         region = entry.get("region", "").strip()
         country = entry.get("country", "").strip().upper()
 
         if not (town and region and country):
-            continue  # Skip incomplete records
+            continue
 
-        key = f"{town}, {region}, {country}"
-        leaderboard_data[key] += 1  # 1 point per item
+        key = (town, region, country)
+        leaderboard_data[key] += 1
 
-    # Convert to sorted list
-    sorted_leaderboard = sorted(
-        [{"community": k, "points": v} for k, v in leaderboard_data.items()],
-        key=lambda x: x["points"],
-        reverse=True
-    )
+    sorted_leaderboard = sorted([
+        {
+            "town": town,
+            "region": region,
+            "country": country,
+            "country_code": country[:2].lower(),  # better if you have a real mapping
+            "count": points
+        }
+        for (town, region, country), points in leaderboard_data.items()
+    ], key=lambda x: x["count"], reverse=True)
 
     return jsonify(sorted_leaderboard)
+
+
 
 
 
