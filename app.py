@@ -1,10 +1,13 @@
 import requests
+import logging
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime, timedelta, timezone
+from collections import defaultdict
 
-valid_cutoff = datetime.now(timezone.utc) - timedelta(days=21)
-
+# Setup logging
+logging.basicConfig(level=logging.DEBUG, format='📘 %(asctime)s [%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
 
 OCR_SPACE_API_KEY = "K83442308688957"
 
@@ -14,12 +17,24 @@ CORS(app)
 # In-memory store for submitted data (replace with DB in production)
 submitted_data = []
 
+# Dummy test data to ensure something shows up on leaderboard
+submitted_data.append({
+    "user_id": "test-user",
+    "town": "Teluk Air Tawar",
+    "region": "Pulau Pinang",
+    "country": "MY",
+    "timestamp": datetime.now(timezone.utc).timestamp() * 1000,
+    "received_at": datetime.now(timezone.utc).isoformat(),
+    "code": "1234567890123",
+    "name": "Sample Item",
+    "data_quality": "High"
+})
+
 @app.route('/ocr', methods=['POST'])
 def ocr():
     data = request.get_json() or {}
     img_b64 = data.get('imageBase64', '')
 
-    # Strip metadata if present (e.g. data:image/jpeg;base64,)
     if ',' in img_b64:
         img_b64 = img_b64.split(',', 1)[1]
     if not img_b64:
@@ -35,7 +50,7 @@ def ocr():
                 'isOverlayRequired': False,
                 'OCREngine': 2
             },
-            timeout=60  # You may increase to 60 if needed
+            timeout=60
         )
 
         result = ocr_response.json()
@@ -55,7 +70,6 @@ def ocr():
         return jsonify(error="OCR request failed", details=str(e)), 502
     except Exception as e:
         return jsonify(error="Internal server error", details=str(e)), 500
-
 
 @app.route('/api/submit', methods=['POST'])
 def submit():
@@ -104,6 +118,8 @@ def submit():
 
             points_awarded += 1
 
+        logger.info("📥 Submission received: %s", submitted_data[-points_awarded:])
+
         if points_awarded == 0:
             return jsonify(error='No valid items to submit'), 400
 
@@ -116,17 +132,16 @@ def submit():
     except Exception as e:
         return jsonify(error='Failed to process submission', details=str(e)), 500
 
-
-from collections import defaultdict
-
 @app.route('/api/leaderboard', methods=['GET'])
 def leaderboard():
-    valid_cutoff = datetime.utcnow() - timedelta(days=21)
+    valid_cutoff = datetime.now(timezone.utc) - timedelta(days=21)
     leaderboard_data = defaultdict(int)
+
+    logger.info("🔍 All submitted data: %s", submitted_data)
 
     for entry in submitted_data:
         timestamp = entry.get("timestamp", 0)
-        if datetime.fromtimestamp(timestamp / 1000) < valid_cutoff:
+        if datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc) < valid_cutoff:
             continue
 
         town = entry.get("town", "").strip()
@@ -144,25 +159,18 @@ def leaderboard():
             "town": town,
             "region": region,
             "country": country,
-            "country_code": country[:2].lower(),  # better if you have a real mapping
+            "country_code": country[:2].lower(),
             "count": points
         }
         for (town, region, country), points in leaderboard_data.items()
     ], key=lambda x: x["count"], reverse=True)
 
-    print("✅ Leaderboard API response:", sorted_leaderboard)
-
-
+    logger.info("✅ Leaderboard API response: %s", sorted_leaderboard)
     return jsonify(sorted_leaderboard)
-
-
-
-
 
 @app.route('/health')
 def health():
     return 'OK'
 
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    app.run(host='0.0.0.0', port=10000, debug=True)
