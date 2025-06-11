@@ -220,6 +220,51 @@ def get_price_data(code):
     finally:
         session.close()
 
+@app.route('/api/compare', methods=['GET'])
+def compare():
+    code = request.args.get('code', '').zfill(13)
+    town = request.args.get('town')
+    region = request.args.get('region')
+
+    session = SessionLocal()
+    try:
+        query = session.query(Submission).filter(Submission.code == code)
+
+        # Filter by exact town and region
+        if town and region:
+            query = query.filter(
+                Submission.town == town,
+                Submission.region == region
+            )
+
+        results = query.order_by(
+            Submission.timestamp.desc()
+        ).limit(10).all()
+
+        # Fallback: if fewer than 3 results for local town, get national data
+        if len(results) < 3 and town and region:
+            results = session.query(Submission).filter(
+                Submission.code == code
+            ).order_by(Submission.timestamp.desc()).limit(10).all()
+
+        # Prepare response
+        data = [
+            {
+                "town": r.town,
+                "region": r.region,
+                "price": r.price,
+                "purc_dt": r.received_at.strftime("%Y-%m-%d"),
+                "lat": None,   # For future map pin support
+                "lng": None
+            }
+            for r in results
+        ]
+
+        return jsonify(data)
+    finally:
+        session.close()
+
+
 @app.route('/health')
 def health():
     return 'OK'
