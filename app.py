@@ -224,6 +224,6 @@ def get_price_data(code):
 def health():
     return 'OK'
 
-if __name__ == '__main__':
-    # In Render, use the start command via Gunicorn; this block only for local dev.
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)), debug=True)
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
+
