@@ -1,5 +1,6 @@
-flask
-flask-cors
-pillow
-pytesseract
-opencv-python-headless
+Flask>=2.0
+Flask-CORS
+SQLAlchemy
+psycopg2-binary
+requests
+gunicorn
